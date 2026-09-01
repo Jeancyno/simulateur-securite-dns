@@ -1,12 +1,12 @@
 import React from 'react';
 import HomePage from './pages/HomePage';
-import './App.css';
+import AppLayout from './components/layout/AppLayout';
 
 function App() {
   return (
-    <div className="app">
+    <AppLayout>
       <HomePage />
-    </div>
+    </AppLayout>
   );
 }
 
