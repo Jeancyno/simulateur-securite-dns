@@ -21,4 +21,6 @@ from django.urls import path, include
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("", include("core.urls")),
+    path("api/dns-poisoning/", include("apps.dns_poisoning.urls")),
+    path("api/dns/", include("apps.dns_simulation.urls")),
 ]

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -17,27 +17,119 @@ import {
 
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
+import dnsPoisoningService from '../services/dnsPoisoningService.js';
 
 const DnsPoisoningPage = () => {
-  const [domain, setDomain] = useState('example.com');
+  const [domain, setDomain] = useState('www.banque-demo.test');
+  const [falsifiedIp, setFalsifiedIp] = useState('192.168.1.99');
   const [isPoisoned, setIsPoisoned] = useState(false);
   const [isSimulating, setIsSimulating] = useState(false);
+  const [isResolving, setIsResolving] = useState(false);
+  const [resolveResult, setResolveResult] = useState(null);
+  const [poisonResult, setPoisonResult] = useState(null);
+  const [error, setError] = useState(null);
+  const [availableDomains, setAvailableDomains] = useState([]);
 
-  const legitimateIp = '93.184.216.34';
-  const falsifiedIp = '10.0.0.99';
+  // Load available domains on mount
+  useEffect(() => {
+    loadAvailableDomains();
+  }, []);
 
-  const handleAttack = () => {
-    setIsSimulating(true);
-
-    setTimeout(() => {
-      setIsPoisoned(true);
-      setIsSimulating(false);
-    }, 1200);
+  const loadAvailableDomains = async () => {
+    try {
+      const response = await dnsPoisoningService.getFakeDomains();
+      if (response.success && response.domains.length > 0) {
+        setAvailableDomains(response.domains);
+        setDomain(response.domains[0]);
+      }
+    } catch (err) {
+      console.error('Failed to load domains:', err);
+    }
   };
 
-  const handleReset = () => {
-    setIsPoisoned(false);
-    setIsSimulating(false);
+  const handleResolve = async () => {
+    if (!domain.trim()) return;
+    
+    setIsResolving(true);
+    setError(null);
+    setResolveResult(null);
+    
+    try {
+      const result = await dnsPoisoningService.resolveDns(domain);
+      if (result.success) {
+        setResolveResult(result);
+        setIsPoisoned(result.cache_status === 'POISONED');
+      } else {
+        setError(result.error || 'Erreur lors de la résolution DNS');
+      }
+    } catch (err) {
+      setError('Erreur de connexion au serveur');
+      console.error('Resolve error:', err);
+    } finally {
+      setIsResolving(false);
+    }
+  };
+
+  const handleAttack = async () => {
+    if (!domain.trim() || !falsifiedIp.trim()) return;
+    
+    setIsSimulating(true);
+    setError(null);
+    setPoisonResult(null);
+    
+    try {
+      const result = await dnsPoisoningService.simulateDnsPoisoning(domain, falsifiedIp);
+      if (result.success) {
+        setPoisonResult(result);
+        setIsPoisoned(true);
+        // Also update resolve result to show the poisoned state
+        setResolveResult(result);
+      } else {
+        setError(result.error || 'Erreur lors de la simulation d\'empoisonnement');
+      }
+    } catch (err) {
+      setError('Erreur de connexion au serveur');
+      console.error('Poison error:', err);
+    } finally {
+      setIsSimulating(false);
+    }
+  };
+
+  const handleReset = async () => {
+    setIsSimulating(true);
+    setError(null);
+    
+    try {
+      const result = await dnsPoisoningService.resetDnsSimulation();
+      if (result.success) {
+        setIsPoisoned(false);
+        setResolveResult(null);
+        setPoisonResult(null);
+      } else {
+        setError('Erreur lors de la réinitialisation');
+      }
+    } catch (err) {
+      setError('Erreur de connexion au serveur');
+      console.error('Reset error:', err);
+    } finally {
+      setIsSimulating(false);
+    }
+  };
+
+  // Get the legitimate IP from resolve result or default
+  const getLegitimateIp = () => {
+    if (resolveResult && resolveResult.legitimate_ip) {
+      return resolveResult.legitimate_ip;
+    }
+    return '192.168.1.10'; // Default fallback
+  };
+
+  // Get the resolved IP (which may be poisoned)
+  const getResolvedIp = () => {
+    if (resolveResult && resolveResult.resolved_ip) {
+      return resolveResult.resolved_ip;
+    }
+    return getLegitimateIp();
   };
 
   return (
@@ -85,6 +177,57 @@ const DnsPoisoningPage = () => {
       </div>
 
       {/* =====================================================
+          RÉSULTAT DE RÉSOLUTION
+      ====================================================== */}
+      {resolveResult && (
+        <div className="space-y-4">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-gradient-to-br from-blue-100 to-blue-200 rounded-xl flex items-center justify-center">
+              <Server className="w-4 h-4 text-blue-600" />
+            </div>
+            <h2 className="text-xl font-bold text-gray-900">
+              Résultat de la résolution
+            </h2>
+          </div>
+
+          <div className={`bg-white rounded-2xl shadow-lg border p-6 ${
+            resolveResult.cache_status === 'POISONED' 
+              ? 'border-red-200/60 shadow-red-100/70' 
+              : 'border-gray-100 shadow-gray-100/70'
+          }`}>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <p className="text-sm text-gray-500 font-medium">Domaine</p>
+                <p className="mt-1 font-mono text-lg font-semibold text-gray-900">{resolveResult.domain}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-500 font-medium">IP résolue</p>
+                <p className={`mt-1 font-mono text-lg font-semibold ${
+                  resolveResult.cache_status === 'POISONED' ? 'text-red-600' : 'text-emerald-600'
+                }`}>{resolveResult.resolved_ip}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-500 font-medium">IP légitime</p>
+                <p className="mt-1 font-mono text-lg font-semibold text-gray-900">{resolveResult.legitimate_ip}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-500 font-medium">État du cache</p>
+                <p className={`mt-1 font-semibold ${
+                  resolveResult.cache_status === 'POISONED' ? 'text-red-600' : 'text-emerald-600'
+                }`}>{resolveResult.cache_status === 'POISONED' ? '⚠ Empoisonné' : '✓ Sain'}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-500 font-medium">Source</p>
+                <p className={`mt-1 font-semibold ${
+                  resolveResult.response_source === 'FALSIFIED' ? 'text-red-600' : 'text-emerald-600'
+                }`}>{resolveResult.response_source === 'FALSIFIED' ? 'Falsifiée' : 'Légitime'}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =====================================================
           CONFIGURATION
       ====================================================== */}
       <div>
@@ -103,12 +246,37 @@ const DnsPoisoningPage = () => {
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <Globe className="w-4 h-4 text-gray-400" />
                 </div>
-                <input
+                <select
                   id="dns-domain"
-                  type="text"
                   value={domain}
                   onChange={(event) => setDomain(event.target.value)}
-                  placeholder="exemple.com"
+                  className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent focus:bg-white transition-all text-gray-900"
+                >
+                  {availableDomains.map((d) => (
+                    <option key={d} value={d}>{d}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="flex-1">
+              <label
+                htmlFor="falsified-ip"
+                className="mb-2 block text-sm font-semibold text-gray-700"
+              >
+                IP falsifiée
+              </label>
+
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Network className="w-4 h-4 text-gray-400" />
+                </div>
+                <input
+                  id="falsified-ip"
+                  type="text"
+                  value={falsifiedIp}
+                  onChange={(event) => setFalsifiedIp(event.target.value)}
+                  placeholder="192.168.1.99"
                   className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent focus:bg-white transition-all text-gray-900 placeholder-gray-400"
                 />
               </div>
@@ -117,10 +285,28 @@ const DnsPoisoningPage = () => {
             <div className="flex flex-wrap gap-3">
               <Button
                 size="lg"
+                variant="primary"
+                icon={ShieldCheck}
+                iconPosition="left"
+                disabled={isResolving || !domain.trim()}
+                onClick={handleResolve}
+              >
+                {isResolving ? (
+                  <span className="flex items-center gap-2">
+                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Résolution...
+                  </span>
+                ) : (
+                  'Résoudre'
+                )}
+              </Button>
+
+              <Button
+                size="lg"
                 variant="danger"
                 icon={AlertTriangle}
                 iconPosition="left"
-                disabled={isSimulating || !domain.trim()}
+                disabled={isSimulating || !domain.trim() || !falsifiedIp.trim()}
                 onClick={handleAttack}
                 className="shadow-lg shadow-red-200/50 hover:shadow-xl hover:shadow-red-200/70 transition-shadow"
               >
@@ -146,6 +332,14 @@ const DnsPoisoningPage = () => {
               </Button>
             </div>
           </div>
+
+          {/* Error message */}
+          {error && (
+            <div className="mt-4 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4">
+              <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-red-800">{error}</p>
+            </div>
+          )}
         </div>
       </div>
 
@@ -204,7 +398,7 @@ const DnsPoisoningPage = () => {
               <DnsNode
                 icon={CheckCircle2}
                 title="Adresse IP"
-                description={legitimateIp}
+                description={getLegitimateIp()}
                 status="success"
               />
 
@@ -295,7 +489,7 @@ const DnsPoisoningPage = () => {
                 <DnsNode
                   icon={AlertTriangle}
                   title="Adresse IP falsifiée"
-                  description={falsifiedIp}
+                  description={getResolvedIp()}
                   status="danger"
                 />
 
@@ -349,7 +543,7 @@ const DnsPoisoningPage = () => {
 
                 <ComparisonRow
                   label="Adresse IP attendue"
-                  value={legitimateIp}
+                  value={getLegitimateIp()}
                 />
 
                 <ComparisonRow
@@ -391,7 +585,7 @@ const DnsPoisoningPage = () => {
 
                 <ComparisonRow
                   label="Adresse IP reçue"
-                  value={falsifiedIp}
+                  value={getResolvedIp()}
                   danger
                 />
 
@@ -423,8 +617,7 @@ const DnsPoisoningPage = () => {
               </p>
 
               <p className="mt-0.5 text-sm leading-relaxed text-red-800/80">
-                Le résolveur simulé retourne maintenant une adresse IP
-                différente de celle attendue. Dans un scénario réel,
+                Le résolveur simulé retourne maintenant l'adresse IP <span className="font-mono font-semibold">{getResolvedIp()}</span> au lieu de <span className="font-mono font-semibold">{getLegitimateIp()}</span>. Dans un scénario réel,
                 cela pourrait conduire l'utilisateur vers une destination
                 différente.
               </p>
