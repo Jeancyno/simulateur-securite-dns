@@ -67,24 +67,6 @@ const HomePage = () => {
     },
   ];
 
-  // const stats = [
-  //   {
-  //     value: '4',
-  //     label: 'Modules',
-  //     icon: Layers,
-  //   },
-  //   {
-  //     value: 'Interactif',
-  //     label: 'Simulations',
-  //     icon: Zap,
-  //   },
-  //   {
-  //     value: 'Pratique',
-  //     label: 'Apprentissage',
-  //     icon: BookOpen,
-  //   },
-  // ];
-
   return (
     <div className="space-y-1">
       {/* Hero Section */}
@@ -156,7 +138,6 @@ const HomePage = () => {
                 variant={module.available ? 'elevated' : 'default'}
                 padding="md"
                 className={`h-full ${!module.available ? 'opacity-75' : ''}`}
-                onClick={module.available ? () => console.log(`Navigation vers ${module.id}`) : undefined}
               >
                 <div className="space-y-4">
                   <div className="flex items-start justify-between">
@@ -234,27 +215,7 @@ const HomePage = () => {
         </div>
       </section>
 
-      {/* Stats Section */}
-      {/* <section>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          {stats.map((stat, index) => {
-            const Icon = stat.icon;
-            return (
-              <Card key={index} variant="gradient" padding="md">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-white rounded-lg flex items-center justify-center shadow-sm">
-                    <Icon className="w-6 h-6 text-primary-600" />
-                  </div>
-                  <div>
-                    <div className="text-2xl font-bold text-secondary-900">{stat.value}</div>
-                    <div className="text-sm text-secondary-600">{stat.label}</div>
-                  </div>
-                </div>
-              </Card>
-            );
-          })}
-        </div>
-      </section> */}
+  
     </div>
   );
 };

@@ -14,8 +14,15 @@ import Logo from '../ui/Logo';
 import NavItem from '../ui/NavItem';
 import IconButton from '../ui/IconButton';
 import Card from '../ui/Card';
+import HomePage from '../../pages/HomePage';
+import DnsResolutionPage from '../../pages/DnsResolutionPage';
+import HistoryPage from '../../pages/HistoryPage';
+import DnsPoisoningPage from '../../pages/DnsPoisoningPage';
+import DnssecPage from '../../pages/DnssecPage';
+import DnsVsDohPage from '../../pages/DnsVsDohPage';
 
-const AppLayout = ({ children }) => {
+
+const AppLayout = () => {
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [activeItem, setActiveItem] = useState('home');
 
@@ -32,12 +39,18 @@ const AppLayout = ({ children }) => {
     },
     {
       icon: Shield,
+      label: 'Poisoning DNS',
+      id: 'dnsPoisoning',
+    },
+    
+    {
+      icon: Shield,
       label: 'DNSSEC',
       id: 'dnssec',
     },
     {
-      icon: Search,
-      label: 'DNS over HTTPS',
+      icon: Shield,
+      label: 'DNS vs DNS over HTTPS',
       id: 'doh',
     },
     {
@@ -79,6 +92,25 @@ const AppLayout = ({ children }) => {
   const handleNavigation = (id) => {
     setActiveItem(id);
     setSidebarOpen(false);
+  };
+
+  const renderPage = () => {
+    switch (activeItem) {
+      case 'home':
+        return <HomePage />;
+      case 'resolution':
+        return <DnsResolutionPage />;
+      case 'history':
+        return <HistoryPage />;
+      case 'dnsPoisoning':
+        return <DnsPoisoningPage />;
+      case 'dnssec':
+        return <DnssecPage />;
+      case 'doh':
+        return <DnsVsDohPage />;
+      default:
+        return <HomePage />;
+    }
   };
 
   return (
@@ -235,7 +267,7 @@ const AppLayout = ({ children }) => {
               lg:py-8
             "
           >
-            {children}
+            {renderPage()}
           </div>
         </main>
 

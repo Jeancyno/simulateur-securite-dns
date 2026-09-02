@@ -1,12 +1,12 @@
 import React from 'react';
-import HomePage from './pages/HomePage';
 import AppLayout from './components/layout/AppLayout';
+import { HistoryProvider } from './contexts/HistoryContext';
 
 function App() {
   return (
-    <AppLayout>
-      <HomePage />
-    </AppLayout>
+    <HistoryProvider>
+      <AppLayout />
+    </HistoryProvider>
   );
 }
 
