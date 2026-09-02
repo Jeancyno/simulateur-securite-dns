@@ -15,7 +15,13 @@ Un simulateur pour tester et analyser la sécurité des configurations DNS.
 # Backend
 cd backend
 python -m venv venv
+#pour linux
 source .venv/bin/activate
+pip install -r requirements.txt
+python manage.py runserver
+
+#pour windows
+.venv\Scripts\activate
 pip install -r requirements.txt
 python manage.py runserver
 
