@@ -56,6 +56,7 @@ const HistoryPage = () => {
             </p>
           </div>
         </Card>
+        
       )}
 
       {/* History List */}

@@ -66,12 +66,18 @@ const DnsResolutionPage = () => {
     setAnimationComplete(true);
   };
 
-  const getStepStatus = (stepId) => {
-    if (stepId < currentStep) return 'completed';
-    if (stepId === currentStep) return 'active';
-    return 'inactive';
-  };
+    const getStepStatus = (stepId) => {
+      if (animationComplete || stepId <= currentStep) {
+        return 'completed';
+      }
 
+      if (stepId === currentStep + 1) {
+        return 'active';
+      }
+
+      return 'inactive';
+    };
+    
   const StepCard = ({ step, status }) => {
     const Icon = step.icon;
     const statusStyles = {
@@ -348,7 +354,7 @@ const DnsResolutionPage = () => {
       {result && (
         <div>
           <div className="bg-white rounded-2xl shadow-lg shadow-gray-100/70 border border-gray-100 overflow-hidden transition-all">
-            <button
+                  <button
               onClick={() => setShowDetails(!showDetails)}
               className="flex items-center justify-between w-full p-5 hover:bg-gray-50/80 transition-colors"
               type="button"
@@ -357,17 +363,21 @@ const DnsResolutionPage = () => {
                 <div className="w-8 h-8 bg-gradient-to-br from-purple-100 to-purple-200 rounded-xl flex items-center justify-center">
                   <FileText className="w-4 h-4 text-purple-600" />
                 </div>
-                <h3 className="font-semibold text-gray-900">Détails techniques</h3>
+
+                <h3 className="font-semibold text-gray-900">
+                  Détails techniques
+                </h3>
+
                 <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
                   {showDetails ? 'Masquer' : 'Afficher'}
                 </span>
               </div>
-              <IconButton
-                icon={showDetails ? ChevronDown : ChevronRight}
-                variant="ghost"
-                ariaLabel={showDetails ? 'Masquer les détails' : 'Afficher les détails'}
-                className="text-gray-400 hover:text-gray-600"
-              />
+
+              {showDetails ? (
+                <ChevronDown className="w-5 h-5 text-gray-400" />
+              ) : (
+                <ChevronRight className="w-5 h-5 text-gray-400" />
+              )}
             </button>
             
             {showDetails && (
