@@ -4,9 +4,10 @@ Ce service génère les étapes de résolution DNS sans effectuer de requêtes r
 """
 
 import random
+import logging
 from datetime import datetime
 
-
+logger = logging.getLogger("dns_simulator")
 # Données fictives des domaines et leurs IP
 SIMULATION_DOMAINS = {
     "example.test": "93.184.216.34",
@@ -88,6 +89,10 @@ class DnsResolver:
         }
         """
         if not self.is_domain_valid(domain):
+            logger.warning(
+                "Résolution DNS refusée - domaine invalide : %s",
+                domain
+            )
             return {
                 "success": False,
                 "error": "Format de domaine invalide"
@@ -102,7 +107,12 @@ class DnsResolver:
         
         # Générer les étapes de résolution
         resolution_steps = self._generate_resolution_steps(domain, ip)
-        
+        logger.info(
+            "Résolution DNS réussie - domaine=%s, ip=%s, temps=%ss",
+            domain,
+            ip,
+            resolution_time_s
+        )
         return {
             "success": True,
             "domain": domain,

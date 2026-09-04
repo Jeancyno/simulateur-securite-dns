@@ -3,7 +3,12 @@ Résolveur DNS fictif pour la simulation pédagogique.
 Ce résolveur utilise uniquement des données fictives et n'effectue aucune résolution DNS réelle.
 """
 
+import logging
+
 from .dns_cache import dns_cache, CacheStatus, DnsCacheEntry
+
+
+logger = logging.getLogger("dns_simulator")
 
 
 # Données fictives des domaines et leurs IP légitimes
@@ -18,24 +23,24 @@ FAKE_DOMAINS = {
 
 class FakeDnsResolver:
     """Résolveur DNS fictif"""
-    
+
     def __init__(self):
         self.cache = dns_cache
-    
+
     def is_domain_known(self, domain: str) -> bool:
         """Vérifie si le domaine est connu dans le simulateur"""
         return domain in FAKE_DOMAINS
-    
+
     def get_legitimate_ip(self, domain: str) -> str:
         """Récupère l'IP légitime d'un domaine"""
         if not self.is_domain_known(domain):
             raise ValueError(f"Domaine inconnu dans le simulateur: {domain}")
         return FAKE_DOMAINS[domain]
-    
+
     def resolve(self, domain: str) -> dict:
         """
         Résout un domaine de manière normale.
-        
+
         Retourne:
         {
             "success": true,
@@ -47,13 +52,17 @@ class FakeDnsResolver:
         }
         """
         if not self.is_domain_known(domain):
+            logger.warning(
+                "DNS Poisoning - domaine inconnu : %s",
+                domain
+            )
             return {
                 "success": False,
                 "error": f"Domaine inconnu dans le simulateur: {domain}"
             }
-        
+
         legitimate_ip = self.get_legitimate_ip(domain)
-        
+
         # Vérifier si le domaine est dans le cache
         if self.cache.exists(domain):
             cache_entry = self.cache.get(domain)
@@ -72,7 +81,15 @@ class FakeDnsResolver:
             resolved_ip = legitimate_ip
             cache_status = CacheStatus.CLEAN.value
             response_source = "LEGITIMATE"
-        
+
+        logger.info(
+            "DNS Poisoning - résolution - domaine=%s, ip=%s, statut_cache=%s, source=%s",
+            domain,
+            resolved_ip,
+            cache_status,
+            response_source
+        )
+
         return {
             "success": True,
             "domain": domain,
@@ -81,11 +98,11 @@ class FakeDnsResolver:
             "cache_status": cache_status,
             "response_source": response_source
         }
-    
+
     def simulate_poisoning(self, domain: str, falsified_ip: str) -> dict:
         """
         Simule un empoisonnement DNS.
-        
+
         Retourne:
         {
             "success": true,
@@ -97,20 +114,29 @@ class FakeDnsResolver:
         }
         """
         if not self.is_domain_known(domain):
+            logger.warning(
+                "DNS Poisoning - domaine inconnu : %s",
+                domain
+            )
             return {
                 "success": False,
                 "error": f"Domaine inconnu dans le simulateur: {domain}"
             }
-        
+
         # Valider l'IP falsifiée
         if not self._is_valid_ip(falsified_ip):
+            logger.warning(
+                "DNS Poisoning - IP falsifiée invalide : domaine=%s, ip=%s",
+                domain,
+                falsified_ip
+            )
             return {
                 "success": False,
                 "error": f"IP falsifiée invalide: {falsified_ip}"
             }
-        
+
         legitimate_ip = self.get_legitimate_ip(domain)
-        
+
         # Injecter l'IP falsifiée dans le cache
         cache_entry = DnsCacheEntry(
             domain=domain,
@@ -119,7 +145,14 @@ class FakeDnsResolver:
             status=CacheStatus.POISONED
         )
         self.cache.set(cache_entry)
-        
+
+        logger.warning(
+            "DNS Poisoning - empoisonnement simulé : domaine=%s, ip_legitime=%s, ip_falsifiee=%s",
+            domain,
+            legitimate_ip,
+            falsified_ip
+        )
+
         return {
             "success": True,
             "domain": domain,
@@ -128,33 +161,33 @@ class FakeDnsResolver:
             "cache_status": CacheStatus.POISONED.value,
             "response_source": "FALSIFIED"
         }
-    
+
     def reset_cache(self) -> dict:
         """
         Réinitialise le cache DNS simulé.
-        
-        Retourne:
-        {
-            "success": true,
-            "message": "Cache réinitialisé avec succès"
-        }
         """
         self.cache.reset()
+
+        logger.info(
+            "DNS Poisoning - cache DNS simulé réinitialisé"
+        )
+
         return {
             "success": True,
             "message": "Cache réinitialisé avec succès"
         }
-    
+
     def _is_valid_ip(self, ip: str) -> bool:
         """Valide le format d'une adresse IP"""
         parts = ip.split('.')
         if len(parts) != 4:
             return False
+
         try:
             return all(0 <= int(part) <= 255 for part in parts)
         except ValueError:
             return False
-    
+
     def get_all_fake_domains(self) -> list:
         """Retourne la liste des domaines fictifs disponibles"""
         return list(FAKE_DOMAINS.keys())
