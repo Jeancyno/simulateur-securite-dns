@@ -33,3 +33,17 @@ npm install
 ## Configuration
 
 Copiez `.env.example` vers `.env` et configurez les variables d'environnement nécessaires.
+
+
+
+# pour le logs 
+dans le fichier settings.py du backend, vous pouvez modifier le niveau de log dans LOGGING
+
+```bash
+python manage.py shell
+
+# Exécutez cette commande dans le shell Django
+import logging
+logger = logging.getLogger("dns_simulator")
+logger.info("Test du système de journalisation DNS")
+```
