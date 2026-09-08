@@ -1,0 +1,1 @@
+default_app_config = 'apps.dnssec_simulation.apps.DnssecSimulationConfig'
