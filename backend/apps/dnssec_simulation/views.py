@@ -5,7 +5,7 @@ from django.views.decorators.http import require_GET, require_POST
 from .services import DNSResolver, DNSCachePoisoningSimulator
 from .models import DNSRecord, TrustAnchor
 from .dnssec.validator import DNSSECValidator
-
+import re
 
 @require_GET
 def resolve_dns(request):
@@ -232,3 +232,49 @@ def get_dnssec_status(request):
             for entry in cache_entries
         ]
     })
+
+@require_GET
+def validate_real_domain(request):
+    """
+    Valide la chaîne DNSSEC d'un domaine réel
+    
+    Query params:
+        domain: Nom de domaine à valider
+    
+    Returns:
+        JSON avec le statut et les détails de la validation
+    """
+    domain = request.GET.get("domain", "").strip()
+    
+    if not domain:
+        return JsonResponse(
+            {"error": "Le paramètre 'domain' est requis"},
+            status=400
+        )
+    
+    # Valider le format du domaine
+    import re
+    domain_pattern = r'^(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.[A-Za-z0-9-]{1,63})*$'
+    if not re.match(domain_pattern, domain):
+        return JsonResponse(
+            {"error": "Format de domaine invalide"},
+            status=400
+        )
+    
+    try:
+        # Utiliser le validateur existant
+        from .dnssec.validator import DNSSECValidator
+        validator = DNSSECValidator()
+        result = validator.validate_real_domain(domain)
+        return JsonResponse(result, status=200)
+        
+    except Exception as e:
+        return JsonResponse(
+            {
+                "error": "Erreur lors de la validation",
+                "message": str(e),
+                "status": "ERREUR DE VÉRIFICATION",
+                "status_icon": "⚪"
+            },
+            status=500
+        )
