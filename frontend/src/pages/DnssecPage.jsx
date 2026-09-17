@@ -19,45 +19,57 @@ import {
 
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
+import dnssecService from '../services/dnssecService';
 
 const DnssecPage = () => {
   const [domain, setDomain] = useState('example.com');
   const [status, setStatus] = useState(null);
   const [isChecking, setIsChecking] = useState(false);
+  const [dnssecData, setDnssecData] = useState(null);
+  const [errorMessage, setErrorMessage] = useState('');
 
-  const dnssecData = {
-    dnskey: {
-      status: 'valid',
-      description: 'Clé publique récupérée',
-    },
-    ds: {
-      status: 'valid',
-      description: 'Lien avec la zone parente vérifié',
-    },
-    rrsig: {
-      status: 'valid',
-      description: 'Signature cryptographique valide',
-    },
-  };
-
-  const handleVerify = () => {
+  const handleVerify = async () => {
     if (!domain.trim()) {
       setStatus('error');
+      setErrorMessage('Nom de domaine requis');
+      return;
+    }
+
+    if (!dnssecService.isValidDomain(domain)) {
+      setStatus('error');
+      setErrorMessage('Format de domaine invalide');
       return;
     }
 
     setIsChecking(true);
     setStatus(null);
+    setDnssecData(null);
+    setErrorMessage('');
 
-    setTimeout(() => {
-      setStatus('valid');
+    try {
+      const result = await dnssecService.verifyDnssec(domain);
+
+      if (result.success) {
+        setStatus(result.status.toLowerCase());
+        setDnssecData(result);
+      } else {
+        setStatus('error');
+        setErrorMessage(result.error || 'Erreur lors de la vérification DNSSEC');
+      }
+    } catch (error) {
+      setStatus('error');
+      setErrorMessage('Erreur de connexion au serveur');
+      console.error('DNSSEC Error:', error);
+    } finally {
       setIsChecking(false);
-    }, 1200);
+    }
   };
 
   const handleReset = () => {
     setStatus(null);
     setIsChecking(false);
+    setDnssecData(null);
+    setErrorMessage('');
   };
 
   return (
@@ -183,11 +195,11 @@ const DnssecPage = () => {
 
           <div>
             <p className="font-semibold text-red-900">
-              Nom de domaine requis
+              Erreur
             </p>
 
             <p className="mt-0.5 text-sm text-red-800/80">
-              Entrez un nom de domaine avant de lancer la vérification DNSSEC.
+              {errorMessage || 'Une erreur est survenue lors de la vérification DNSSEC.'}
             </p>
           </div>
         </div>
@@ -196,7 +208,7 @@ const DnssecPage = () => {
       {/* =====================================================
           DIAGNOSTIC
       ====================================================== */}
-      {status && status !== 'error' && (
+      {status && status !== 'error' && dnssecData && (
         <div className="space-y-4 animate-fadeIn">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-gradient-to-br from-emerald-100 to-emerald-200 rounded-xl flex items-center justify-center">
@@ -207,14 +219,14 @@ const DnssecPage = () => {
             </h2>
           </div>
 
-          <StatusBanner status={status} domain={domain} />
+          <StatusBanner status={status} domain={domain} message={dnssecData.message} />
         </div>
       )}
 
       {/* =====================================================
           ENREGISTREMENTS DNSSEC
       ====================================================== */}
-      {status === 'valid' && (
+      {status && status !== 'error' && dnssecData && (
         <div className="space-y-4 animate-fadeIn">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-gradient-to-br from-purple-100 to-purple-200 rounded-xl flex items-center justify-center">
@@ -223,31 +235,28 @@ const DnssecPage = () => {
             <h2 className="text-xl font-bold text-gray-900">
               Enregistrements DNSSEC
             </h2>
-            <span className="text-xs text-gray-400 font-medium bg-gray-100 px-2.5 py-0.5 rounded-full">
-              3 enregistrements
-            </span>
           </div>
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             <DnssecRecord
               icon={KeyRound}
               title="DNSKEY"
-              description={dnssecData.dnskey.description}
-              status="valid"
+              description={dnssecData.dnskey?.description || 'Non disponible'}
+              status={dnssecData.dnskey?.exists ? 'valid' : 'invalid'}
             />
 
             <DnssecRecord
               icon={Link2}
               title="DS"
-              description={dnssecData.ds.description}
-              status="valid"
+              description={dnssecData.ds?.description || 'Non disponible'}
+              status={dnssecData.ds?.exists ? 'valid' : 'invalid'}
             />
 
             <DnssecRecord
               icon={FileCheck2}
               title="RRSIG"
-              description={dnssecData.rrsig.description}
-              status="valid"
+              description={dnssecData.rrsig?.description || 'Non disponible'}
+              status={dnssecData.rrsig?.exists ? 'valid' : 'invalid'}
             />
           </div>
         </div>
@@ -315,7 +324,7 @@ const DnssecPage = () => {
         </div>
       )}
 
-    
+
       {/* =====================================================
           CONTRE-MESURES
       ====================================================== */}
@@ -348,12 +357,12 @@ const DnssecPage = () => {
    COMPOSANTS
 ============================================================ */
 
-const StatusBanner = ({ status, domain }) => {
+const StatusBanner = ({ status, domain, message }) => {
   const configurations = {
     valid: {
       icon: CheckCircle2,
       title: 'DNSSEC VALIDÉ',
-      description: `La chaîne de confiance de ${domain} est valide.`,
+      description: message || `La chaîne de confiance de ${domain} est valide.`,
       container: 'border-emerald-200/60 bg-gradient-to-br from-emerald-50 to-emerald-100/40',
       iconContainer: 'bg-emerald-100',
       iconColor: 'text-emerald-600',
@@ -364,7 +373,7 @@ const StatusBanner = ({ status, domain }) => {
     unsigned: {
       icon: Info,
       title: 'DNSSEC NON CONFIGURÉ',
-      description: `Le domaine ${domain} ne possède pas de validation DNSSEC.`,
+      description: message || `Le domaine ${domain} ne possède pas de validation DNSSEC.`,
       container: 'border-amber-200/60 bg-gradient-to-br from-amber-50 to-amber-100/40',
       iconContainer: 'bg-amber-100',
       iconColor: 'text-amber-600',
@@ -375,7 +384,7 @@ const StatusBanner = ({ status, domain }) => {
     invalid: {
       icon: AlertTriangle,
       title: 'VALIDATION ÉCHOUÉE',
-      description: 'La chaîne de confiance DNSSEC est rompue ou invalide.',
+      description: message || 'La chaîne de confiance DNSSEC est rompue ou invalide.',
       container: 'border-red-200/60 bg-gradient-to-br from-red-50 to-red-100/40',
       iconContainer: 'bg-red-100',
       iconColor: 'text-red-600',
@@ -413,67 +422,81 @@ const DnssecRecord = ({
   title,
   description,
   status,
-}) => (
-  <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm hover:shadow-md hover:shadow-gray-100/50 transition-all duration-200 group">
-    <div className="flex items-center justify-between">
-      <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-blue-50 to-blue-100 flex items-center justify-center group-hover:scale-110 transition-transform duration-200">
-        <Icon className="w-5 h-5 text-blue-600" />
+}) => {
+  const IconComponent = Icon;
+
+  return (
+    <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm hover:shadow-md hover:shadow-gray-100/50 transition-all duration-200 group">
+      <div className="flex items-center justify-between">
+        <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-blue-50 to-blue-100 flex items-center justify-center group-hover:scale-110 transition-transform duration-200">
+          <IconComponent className="w-5 h-5 text-blue-600" />
+        </div>
+
+        {status === 'valid' && (
+          <div className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-100 rounded-full">
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+            <span className="text-[10px] font-semibold text-emerald-700 uppercase tracking-wide">Valide</span>
+          </div>
+        )}
+        {status === 'invalid' && (
+          <div className="flex items-center gap-1.5 px-2.5 py-1 bg-red-100 rounded-full">
+            <AlertTriangle className="w-3.5 h-3.5 text-red-600" />
+            <span className="text-[10px] font-semibold text-red-700 uppercase tracking-wide">Invalide</span>
+          </div>
+        )}
       </div>
 
-      {status === 'valid' && (
-        <div className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-100 rounded-full">
-          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-          <span className="text-[10px] font-semibold text-emerald-700 uppercase tracking-wide">Valide</span>
-        </div>
-      )}
+      <h3 className="mt-4 font-semibold text-gray-900">
+        {title}
+      </h3>
+
+      <p className="mt-1.5 text-sm leading-relaxed text-gray-500">
+        {description}
+      </p>
+
+      <div className="mt-4 h-1 w-12 bg-gradient-to-r from-blue-400 to-blue-600 rounded-full group-hover:w-full transition-all duration-300" />
     </div>
-
-    <h3 className="mt-4 font-semibold text-gray-900">
-      {title}
-    </h3>
-
-    <p className="mt-1.5 text-sm leading-relaxed text-gray-500">
-      {description}
-    </p>
-
-    <div className="mt-4 h-1 w-12 bg-gradient-to-r from-blue-400 to-blue-600 rounded-full group-hover:w-full transition-all duration-300" />
-  </div>
-);
+  );
+};
 
 const TrustNode = ({
   icon: Icon,
   title,
   description,
   success = false,
-}) => (
-  <div className={`flex w-full max-w-md items-center gap-4 rounded-2xl border-2 p-4 transition-all duration-300 hover:shadow-md ${
-    success
-      ? 'border-emerald-200/60 bg-gradient-to-br from-emerald-50 to-emerald-100/40 hover:border-emerald-300'
-      : 'border-gray-200/60 bg-white hover:border-gray-300'
-  }`}>
-    <div className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 transition-all duration-300 ${
+}) => {
+  const IconComponent = Icon;
+
+  return (
+    <div className={`flex w-full max-w-md items-center gap-4 rounded-2xl border-2 p-4 transition-all duration-300 hover:shadow-md ${
       success
-        ? 'bg-emerald-100 text-emerald-600'
-        : 'bg-blue-50 text-blue-600'
+        ? 'border-emerald-200/60 bg-gradient-to-br from-emerald-50 to-emerald-100/40 hover:border-emerald-300'
+        : 'border-gray-200/60 bg-white hover:border-gray-300'
     }`}>
-      <Icon className="w-5 h-5" />
+      <div className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 transition-all duration-300 ${
+        success
+          ? 'bg-emerald-100 text-emerald-600'
+          : 'bg-blue-50 text-blue-600'
+      }`}>
+        <IconComponent className="w-5 h-5" />
+      </div>
+
+      <div className="min-w-0 flex-1">
+        <p className="font-semibold text-gray-900">
+          {title}
+        </p>
+
+        <p className="mt-0.5 text-sm text-gray-500">
+          {description}
+        </p>
+      </div>
+
+      {success && (
+        <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+      )}
     </div>
-
-    <div className="min-w-0 flex-1">
-      <p className="font-semibold text-gray-900">
-        {title}
-      </p>
-
-      <p className="mt-0.5 text-sm text-gray-500">
-        {description}
-      </p>
-    </div>
-
-    {success && (
-      <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0" />
-    )}
-  </div>
-);
+  );
+};
 
 const ArrowDown = () => (
   <div className="flex h-12 items-center justify-center">
@@ -486,22 +509,26 @@ const EducationalCard = ({
   icon: Icon,
   title,
   description,
-}) => (
-  <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm hover:shadow-md hover:shadow-gray-100/50 transition-all duration-200 group h-full">
-    <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-blue-50 to-blue-100 flex items-center justify-center group-hover:scale-110 transition-transform duration-200">
-      <Icon className="w-5 h-5 text-blue-600" />
+}) => {
+  const IconComponent = Icon;
+
+  return (
+    <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm hover:shadow-md hover:shadow-gray-100/50 transition-all duration-200 group h-full">
+      <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-blue-50 to-blue-100 flex items-center justify-center group-hover:scale-110 transition-transform duration-200">
+        <IconComponent className="w-5 h-5 text-blue-600" />
+      </div>
+
+      <h3 className="mt-4 font-semibold text-gray-900">
+        {title}
+      </h3>
+
+      <p className="mt-1.5 text-sm leading-relaxed text-gray-500">
+        {description}
+      </p>
+
+      <div className="mt-4 h-1 w-12 bg-gradient-to-r from-blue-400 to-blue-600 rounded-full group-hover:w-full transition-all duration-300" />
     </div>
-
-    <h3 className="mt-4 font-semibold text-gray-900">
-      {title}
-    </h3>
-
-    <p className="mt-1.5 text-sm leading-relaxed text-gray-500">
-      {description}
-    </p>
-
-    <div className="mt-4 h-1 w-12 bg-gradient-to-r from-blue-400 to-blue-600 rounded-full group-hover:w-full transition-all duration-300" />
-  </div>
-);
+  );
+};
 
 export default DnssecPage;

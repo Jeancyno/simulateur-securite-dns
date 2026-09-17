@@ -23,4 +23,6 @@ urlpatterns = [
     path("", include("core.urls")),
     path("api/dns-poisoning/", include("apps.dns_poisoning.urls")),
     path("api/dns/", include("apps.dns_simulation.urls")),
+    path("api/dnssec/", include("apps.dnssec_simulation.urls")),
+    path("api/doh/", include("apps.doh_simulation.urls")),
 ]
