@@ -19,56 +19,52 @@ import {
 
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
+import dohService from '../services/dohService';
 
 const DnsVsDohPage = () => {
   const [domain, setDomain] = useState('example.com');
   const [status, setStatus] = useState(null);
   const [isComparing, setIsComparing] = useState(false);
-
   const [results, setResults] = useState(null);
+  const [errorMessage, setErrorMessage] = useState('');
 
-  const handleCompare = () => {
+  const handleCompare = async () => {
     if (!domain.trim()) {
       setStatus('error');
       setResults(null);
+      setErrorMessage('Nom de domaine requis');
+      return;
+    }
+
+    if (!dohService.isValidDomain(domain)) {
+      setStatus('error');
+      setResults(null);
+      setErrorMessage('Format de domaine invalide');
       return;
     }
 
     setIsComparing(true);
     setStatus(null);
     setResults(null);
+    setErrorMessage('');
 
-    // Données de démonstration.
-    // Elles seront remplacées par l'appel réel au Backend.
-    setTimeout(() => {
-      setResults({
-        classic: {
-          protocol: 'DNS',
-          transport: 'UDP / TCP',
-          encryption: false,
-          privacy: 'Limitée',
-          response: '93.184.216.34',
-          responseTime: '24 ms',
-          resolver: 'Résolveur DNS',
-          visibility: 'Requête plus directement observable',
-        },
+    try {
+      const comparison = await dohService.compareDnsVsDoh(domain);
 
-        doh: {
-          protocol: 'DNS over HTTPS',
-          transport: 'HTTPS',
-          encryption: true,
-          privacy: 'Améliorée',
-          response: '93.184.216.34',
-          responseTime: '38 ms',
-          resolver: 'Résolveur DoH',
-          visibility: 'Requête transportée dans un canal HTTPS chiffré',
-          fallback: false,
-        },
-      });
-
-      setStatus('success');
+      if (comparison.success) {
+        setResults(comparison);
+        setStatus('success');
+      } else {
+        setStatus('error');
+        setErrorMessage(comparison.error || 'Erreur lors de la comparaison DNS vs DoH');
+      }
+    } catch (error) {
+      setStatus('error');
+      setErrorMessage('Erreur de connexion au serveur');
+      console.error('DoH Error:', error);
+    } finally {
       setIsComparing(false);
-    }, 1200);
+    }
   };
 
   const handleReset = () => {
@@ -76,6 +72,7 @@ const DnsVsDohPage = () => {
     setStatus(null);
     setResults(null);
     setIsComparing(false);
+    setErrorMessage('');
   };
 
   return (
@@ -211,11 +208,11 @@ const DnsVsDohPage = () => {
 
           <div>
             <p className="font-semibold text-red-900">
-              Nom de domaine requis
+              Erreur
             </p>
 
             <p className="mt-0.5 text-sm text-red-800/80">
-              Entrez un nom de domaine avant de lancer la comparaison.
+              {errorMessage || 'Une erreur est survenue lors de la comparaison.'}
             </p>
           </div>
         </div>
@@ -315,8 +312,8 @@ const DnsVsDohPage = () => {
 
               <ComparisonRow
                 label="Temps de réponse"
-                classic={results.classic.responseTime}
-                doh={results.doh.responseTime}
+                classic={results.classic.response_time}
+                doh={results.doh.response_time}
               />
 
             </div>
@@ -492,7 +489,7 @@ const ComparisonCard = ({
         <DataLine
           icon={Clock3}
           label="Temps de réponse"
-          value={data.responseTime}
+          value={data.response_time}
         />
 
         <DataLine
@@ -525,7 +522,7 @@ const ComparisonCard = ({
 
         </div>
 
-        {data.fallback && (
+        {data.fallback_used && (
           <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
 
             <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0" />
