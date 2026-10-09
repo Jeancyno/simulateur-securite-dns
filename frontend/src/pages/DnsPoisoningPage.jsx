@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -28,32 +28,22 @@ const DnsPoisoningPage = () => {
   const [resolveResult, setResolveResult] = useState(null);
   const [poisonResult, setPoisonResult] = useState(null);
   const [error, setError] = useState(null);
-  const [availableDomains, setAvailableDomains] = useState([]);
-
-  // Load available domains on mount
-  useEffect(() => {
-    loadAvailableDomains();
-  }, []);
-
-  const loadAvailableDomains = async () => {
-    try {
-      const response = await dnsPoisoningService.getFakeDomains();
-      if (response.success && response.domains.length > 0) {
-        setAvailableDomains(response.domains);
-        setDomain(response.domains[0]);
-      }
-    } catch (err) {
-      console.error('Failed to load domains:', err);
-    }
-  };
 
   const handleResolve = async () => {
-    if (!domain.trim()) return;
-    
+    if (!domain.trim()) {
+      setError('Veuillez entrer un nom de domaine');
+      return;
+    }
+
+    if (!dnsPoisoningService.isValidDomain(domain)) {
+      setError('Format de domaine invalide');
+      return;
+    }
+
     setIsResolving(true);
     setError(null);
     setResolveResult(null);
-    
+
     try {
       const result = await dnsPoisoningService.resolveDns(domain);
       if (result.success) {
@@ -71,12 +61,30 @@ const DnsPoisoningPage = () => {
   };
 
   const handleAttack = async () => {
-    if (!domain.trim() || !falsifiedIp.trim()) return;
-    
+    if (!domain.trim()) {
+      setError('Veuillez entrer un nom de domaine');
+      return;
+    }
+
+    if (!dnsPoisoningService.isValidDomain(domain)) {
+      setError('Format de domaine invalide');
+      return;
+    }
+
+    if (!falsifiedIp.trim()) {
+      setError('Veuillez entrer une adresse IP falsifiée');
+      return;
+    }
+
+    if (!dnsPoisoningService.isValidIp(falsifiedIp)) {
+      setError('Format d\'adresse IP invalide');
+      return;
+    }
+
     setIsSimulating(true);
     setError(null);
     setPoisonResult(null);
-    
+
     try {
       const result = await dnsPoisoningService.simulateDnsPoisoning(domain, falsifiedIp);
       if (result.success) {
@@ -246,17 +254,18 @@ const DnsPoisoningPage = () => {
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <Globe className="w-4 h-4 text-gray-400" />
                 </div>
-                <select
+                <input
                   id="dns-domain"
+                  type="text"
                   value={domain}
                   onChange={(event) => setDomain(event.target.value)}
-                  className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent focus:bg-white transition-all text-gray-900"
-                >
-                  {availableDomains.map((d) => (
-                    <option key={d} value={d}>{d}</option>
-                  ))}
-                </select>
+                  placeholder="www.exemple.com"
+                  className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent focus:bg-white transition-all text-gray-900 placeholder-gray-400"
+                />
               </div>
+              <p className="mt-2 text-xs text-gray-500">
+                Mode simulation : les domaines saisis sont traités avec des données DNS fictives. Aucune requête DNS réelle n'est effectuée dans ce scénario.
+              </p>
             </div>
 
             <div className="flex-1">

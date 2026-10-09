@@ -69,10 +69,20 @@ const dnsPoisoningService = {
 
   // Validation du format d'un domaine
   isValidDomain(domain) {
-    const domainRegex =
-      /^[a-zA-Z0-9][a-zA-Z0-9-]{0,61}[a-zA-Z0-9](\.[a-zA-Z0-9][a-zA-Z0-9-]{0,61}[a-zA-Z0-9])*$/;
+    if (typeof domain !== 'string') {
+      return false;
+    }
 
-    return domainRegex.test(domain) && domain.length <= 253;
+    const value = domain.trim();
+
+    if (!value || value.length > 253) {
+      return false;
+    }
+
+    const domainRegex =
+      /^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/;
+
+    return domainRegex.test(value);
   },
 
   // Validation du format d'une adresse IPv4

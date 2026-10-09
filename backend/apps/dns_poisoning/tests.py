@@ -41,14 +41,17 @@ class DnsPoisoningAPITestCase(TestCase):
         self.assertEqual(response.data['response_source'], 'LEGITIMATE')
     
     def test_resolve_unknown_domain(self):
-        """Test de résolution d'un domaine inconnu"""
+        """Test de résolution d'un domaine inconnu (format valide mais non prédéfini)"""
         url = reverse('dns_poisoning:resolve_dns')
         data = {'domain': 'unknown-domain.com'}
         response = self.client.post(url, data, format='json')
-        
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertFalse(response.data['success'])
-        self.assertIn('error', response.data)
+
+        # Maintenant les domaines inconnus mais valides sont acceptés
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data['success'])
+        self.assertEqual(response.data['domain'], 'unknown-domain.com')
+        # L'IP doit être simulée (commence par 10.)
+        self.assertTrue(response.data['legitimate_ip'].startswith('10.'))
     
     def test_resolve_empty_domain(self):
         """Test de résolution avec un domaine vide"""
@@ -76,16 +79,19 @@ class DnsPoisoningAPITestCase(TestCase):
         self.assertEqual(response.data['response_source'], 'FALSIFIED')
     
     def test_simulate_poisoning_unknown_domain(self):
-        """Test d'empoisonnement sur un domaine inconnu"""
+        """Test d'empoisonnement sur un domaine inconnu (format valide mais non prédéfini)"""
         url = reverse('dns_poisoning:simulate_poisoning')
         data = {
             'domain': 'unknown-domain.com',
             'falsified_ip': '192.168.1.99'
         }
         response = self.client.post(url, data, format='json')
-        
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertFalse(response.data['success'])
+
+        # Maintenant les domaines inconnus mais valides sont acceptés
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data['success'])
+        self.assertEqual(response.data['domain'], 'unknown-domain.com')
+        self.assertTrue(response.data['legitimate_ip'].startswith('10.'))
     
     def test_simulate_poisoning_invalid_ip(self):
         """Test d'empoisonnement avec une IP invalide"""
@@ -262,6 +268,18 @@ class FakeDnsResolverServiceTestCase(TestCase):
         """Test de vérification de domaine connu"""
         self.assertTrue(self.resolver.is_domain_known('www.banque-demo.test'))
         self.assertFalse(self.resolver.is_domain_known('unknown.com'))
+
+    def test_is_domain_valid(self):
+        """Test de validation de format de domaine"""
+        self.assertTrue(self.resolver.is_domain_valid('www.regiedeseaux.com'))
+        self.assertTrue(self.resolver.is_domain_valid('www.google.com'))
+        self.assertTrue(self.resolver.is_domain_valid('exemple.cd'))
+        self.assertTrue(self.resolver.is_domain_valid('entreprise.local.test'))
+        self.assertFalse(self.resolver.is_domain_valid('bonjour'))
+        self.assertFalse(self.resolver.is_domain_valid('abc@'))
+        self.assertFalse(self.resolver.is_domain_valid('http://google.com'))
+        self.assertFalse(self.resolver.is_domain_valid(''))
+        self.assertFalse(self.resolver.is_domain_valid('a' * 254))  # Dépasse 253 caractères
     
     def test_get_legitimate_ip(self):
         """Test de récupération de l'IP légitime"""
@@ -269,9 +287,10 @@ class FakeDnsResolverServiceTestCase(TestCase):
         self.assertEqual(ip, '192.168.1.10')
     
     def test_get_legitimate_ip_unknown_domain(self):
-        """Test de récupération d'IP pour un domaine inconnu"""
-        with self.assertRaises(ValueError):
-            self.resolver.get_legitimate_ip('unknown.com')
+        """Test de récupération d'IP pour un domaine inconnu (format valide mais non prédéfini)"""
+        # Maintenant les domaines inconnus mais valides génèrent une IP simulée
+        ip = self.resolver.get_legitimate_ip('unknown.com')
+        self.assertTrue(ip.startswith('10.'))
     
     def test_resolve_known_domain(self):
         """Test de résolution d'un domaine connu"""
@@ -285,11 +304,14 @@ class FakeDnsResolverServiceTestCase(TestCase):
         self.assertEqual(result['response_source'], 'LEGITIMATE')
     
     def test_resolve_unknown_domain(self):
-        """Test de résolution d'un domaine inconnu"""
+        """Test de résolution d'un domaine inconnu (format valide mais non prédéfini)"""
         result = self.resolver.resolve('unknown.com')
-        
-        self.assertFalse(result['success'])
-        self.assertIn('error', result)
+
+        # Maintenant les domaines inconnus mais valides sont acceptés
+        self.assertTrue(result['success'])
+        self.assertEqual(result['domain'], 'unknown.com')
+        # L'IP doit être simulée (commence par 10.)
+        self.assertTrue(result['legitimate_ip'].startswith('10.'))
     
     def test_simulate_poisoning(self):
         """Test de simulation d'empoisonnement"""
@@ -327,10 +349,158 @@ class FakeDnsResolverServiceTestCase(TestCase):
     def test_get_all_fake_domains(self):
         """Test de récupération de tous les domaines fictifs"""
         domains = self.resolver.get_all_fake_domains()
-        
+
         self.assertIsInstance(domains, list)
         self.assertIn('www.banque-demo.test', domains)
         self.assertIn('www.exemple.test', domains)
         self.assertIn('www.dns-demo.test', domains)
+
+
+class DnsPoisoningFreeDomainTestCase(TestCase):
+    """Tests pour les domaines libres (non prédéfinis)"""
+
+    def setUp(self):
+        """Configuration initiale pour chaque test"""
+        self.client = APIClient()
+        dns_cache.reset()
+
+    def test_resolve_valid_free_domain(self):
+        """Test de résolution d'un domaine valide non prédéfini"""
+        url = reverse('dns_poisoning:resolve_dns')
+        data = {'domain': 'www.regiedeseaux.com'}
+        response = self.client.post(url, data, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data['success'])
+        self.assertEqual(response.data['domain'], 'www.regiedeseaux.com')
+        # L'IP doit être simulée (commence par 10.)
+        self.assertTrue(response.data['legitimate_ip'].startswith('10.'))
+        self.assertEqual(response.data['resolved_ip'], response.data['legitimate_ip'])
+        self.assertEqual(response.data['cache_status'], 'CLEAN')
+        self.assertEqual(response.data['response_source'], 'LEGITIMATE')
+
+    def test_resolve_invalid_domain(self):
+        """Test de résolution d'un domaine invalide"""
+        url = reverse('dns_poisoning:resolve_dns')
+        data = {'domain': 'bonjour'}
+        response = self.client.post(url, data, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(response.data['success'])
+        self.assertIn('error', response.data)
+
+    def test_resolve_domain_with_special_chars(self):
+        """Test de résolution d'un domaine avec caractères spéciaux"""
+        url = reverse('dns_poisoning:resolve_dns')
+        data = {'domain': 'abc@'}
+        response = self.client.post(url, data, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(response.data['success'])
+
+    def test_resolve_domain_with_protocol(self):
+        """Test de résolution d'un domaine avec protocole HTTP"""
+        url = reverse('dns_poisoning:resolve_dns')
+        data = {'domain': 'http://google.com'}
+        response = self.client.post(url, data, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(response.data['success'])
+
+    def test_simulate_poisoning_free_domain(self):
+        """Test d'empoisonnement d'un domaine libre"""
+        url = reverse('dns_poisoning:simulate_poisoning')
+        data = {
+            'domain': 'www.regiedeseaux.com',
+            'falsified_ip': '10.99.99.99'
+        }
+        response = self.client.post(url, data, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data['success'])
+        self.assertEqual(response.data['domain'], 'www.regiedeseaux.com')
+        self.assertTrue(response.data['legitimate_ip'].startswith('10.'))
+        self.assertEqual(response.data['resolved_ip'], '10.99.99.99')
+        self.assertEqual(response.data['cache_status'], 'POISONED')
+        self.assertEqual(response.data['response_source'], 'FALSIFIED')
+
+    def test_resolve_after_poisoning_free_domain(self):
+        """Test de résolution après empoisonnement d'un domaine libre"""
+        # D'abord empoisonner
+        poison_url = reverse('dns_poisoning:simulate_poisoning')
+        poison_data = {
+            'domain': 'www.regiedeseaux.com',
+            'falsified_ip': '10.99.99.99'
+        }
+        self.client.post(poison_url, poison_data, format='json')
+
+        # Ensuite résoudre
+        resolve_url = reverse('dns_poisoning:resolve_dns')
+        resolve_data = {'domain': 'www.regiedeseaux.com'}
+        response = self.client.post(resolve_url, resolve_data, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data['success'])
+        self.assertEqual(response.data['resolved_ip'], '10.99.99.99')
+        self.assertEqual(response.data['cache_status'], 'POISONED')
+        self.assertEqual(response.data['response_source'], 'FALSIFIED')
+
+    def test_reset_clears_free_domain(self):
+        """Test que RESET nettoie le cache d'un domaine libre"""
+        # Empoisonner d'abord
+        poison_url = reverse('dns_poisoning:simulate_poisoning')
+        poison_data = {
+            'domain': 'www.regiedeseaux.com',
+            'falsified_ip': '10.99.99.99'
+        }
+        self.client.post(poison_url, poison_data, format='json')
+
+        # Réinitialiser
+        reset_url = reverse('dns_poisoning:reset_cache')
+        response = self.client.post(reset_url, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data['success'])
+
+        # Vérifier que le cache est réinitialisé
+        resolve_url = reverse('dns_poisoning:resolve_dns')
+        resolve_data = {'domain': 'www.regiedeseaux.com'}
+        resolve_response = self.client.post(resolve_url, resolve_data, format='json')
+
+        # L'IP doit être différente de l'IP falsifiée (retour à l'IP simulée)
+        self.assertNotEqual(resolve_response.data['resolved_ip'], '10.99.99.99')
+        self.assertEqual(resolve_response.data['cache_status'], 'CLEAN')
+
+    def test_deterministic_ip_generation(self):
+        """Test que le même domaine génère toujours la même IP simulée"""
+        url = reverse('dns_poisoning:resolve_dns')
+        data = {'domain': 'www.regiedeseaux.com'}
+
+        # Première résolution
+        response1 = self.client.post(url, data, format='json')
+        ip1 = response1.data['legitimate_ip']
+
+        # Réinitialiser le cache
+        reset_url = reverse('dns_poisoning:reset_cache')
+        self.client.post(reset_url, format='json')
+
+        # Deuxième résolution
+        response2 = self.client.post(url, data, format='json')
+        ip2 = response2.data['legitimate_ip']
+
+        # Les IP doivent être identiques
+        self.assertEqual(ip1, ip2)
+        self.assertTrue(ip1.startswith('10.'))
+
+    def test_predefined_domains_still_work(self):
+        """Test que les domaines prédéfinis fonctionnent toujours"""
+        url = reverse('dns_poisoning:resolve_dns')
+        data = {'domain': 'www.banque-demo.test'}
+        response = self.client.post(url, data, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data['success'])
+        self.assertEqual(response.data['legitimate_ip'], '192.168.1.10')
+        self.assertEqual(response.data['resolved_ip'], '192.168.1.10')
 
 # Create your tests here.
